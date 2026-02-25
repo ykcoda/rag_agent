@@ -90,9 +90,15 @@ First run                     Subsequent runs
 scripts/ingest.py             scripts/sync.py
   1. List ALL files              1. Fetch delta since last token
   2. Download + chunk all        2. Delete removed-file chunks
-  3. Clear Chroma collection     3. Re-embed changed files only
-  4. Embed + store all chunks    4. Save new delta token
-  5. Save initial delta token
+  3. Save chunk cache to disk    3. Re-embed changed files only
+  4. Clear Chroma collection     4. Save new delta token
+  5. Embed + store all chunks
+  6. Delete cache on success
+  7. Save initial delta token
+
+If ingest.py fails during step 5 (embedding), re-running it
+automatically resumes from the cache — skipping the SharePoint
+download and avoiding duplicate embedding API charges.
 ```
 
 ### Container Architecture (Docker Compose)
@@ -248,7 +254,8 @@ rag_agent/
 │
 ├── data/                     Runtime data (git-ignored)
 │   ├── chroma/               ChromaDB persistent vector store
-│   └── delta_token.json      Graph API delta link for incremental sync
+│   ├── delta_token.json      Graph API delta link for incremental sync
+│   └── ingest_cache.pkl      Temporary chunk cache (auto-deleted on success)
 │
 ├── Dockerfile
 ├── docker-compose.yml
@@ -528,7 +535,10 @@ Check `OPENAI_API_KEY` in `.env`. Ensure there are no leading/trailing spaces.
 `OPENAI_MODEL` in `.env` references a non-existent model. Change it to a valid model such as `gpt-4o-mini` or `gpt-4o`.
 
 #### `RateLimitError` during ingestion
-The embeddings API rate limit was hit. The ingest script does not retry automatically. Re-run `ingest.py` — it will skip already-indexed files on subsequent runs (via delta token).
+The embeddings API rate limit was hit. The ingest script does not retry automatically. Re-run `ingest.py` — the chunk cache (`data/ingest_cache.pkl`) is preserved on failure, so the SharePoint download and parsing are skipped and only the embedding step is retried.
+
+#### `Batch size ... is greater than max batch size of 5461`
+ChromaDB's Rust backend enforces a per-call upsert limit. This is handled automatically by the ingest and sync scripts (documents are sent in batches of 500). If you see this error, ensure you are running the latest version of the scripts.
 
 ---
 

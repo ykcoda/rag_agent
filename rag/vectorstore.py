@@ -78,7 +78,9 @@ def upsert_documents(docs: list[Document], item_ids: list[str] | None = None) ->
         return
 
     vs = get_vectorstore()
-    vs.add_documents(docs)
+    batch_size = 500
+    for i in range(0, len(docs), batch_size):
+        vs.add_documents(docs[i : i + batch_size])
     log.info("Upserted %d chunks into Chroma.", len(docs))
 
 
