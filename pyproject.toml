@@ -16,6 +16,7 @@ dependencies = [
     "langchain-chroma>=0.1",
     "langchain-community>=0.3",
     "langchain-core>=0.3",
+    "langchain-ollama>=0.2",
     "langchain-openai>=0.2",
     "langchain-text-splitters>=0.3",
     "msal>=1.28",

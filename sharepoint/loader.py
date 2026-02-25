@@ -19,7 +19,7 @@ from rag_agent.sharepoint.client import SharePointClient
 
 log = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".xlsx"}
+SUPPORTED_EXTENSIONS = {".pdf", ".doc", ".docx", ".xlsx"}
 
 
 # ── Per-format loaders ─────────────────────────────────────────────────────
@@ -49,9 +49,20 @@ def _load_docx(content: bytes, meta: dict) -> list[Document]:
         os.unlink(tmp)
 
 
-def _load_text(content: bytes, meta: dict) -> list[Document]:
-    text = content.decode("utf-8", errors="replace")
-    return [Document(page_content=text, metadata=meta)]
+def _load_doc(content: bytes, meta: dict) -> list[Document]:
+    """Load legacy .doc files via docx2txt (best-effort; falls back to empty)."""
+    with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as f:
+        f.write(content)
+        tmp = f.name
+    try:
+        import docx2txt
+        text = docx2txt.process(tmp)
+        if text and text.strip():
+            return [Document(page_content=text, metadata=meta)]
+        log.warning("docx2txt returned empty content for '%s'", meta.get("source"))
+        return []
+    finally:
+        os.unlink(tmp)
 
 
 def _load_xlsx(content: bytes, meta: dict) -> list[Document]:
@@ -90,6 +101,15 @@ def file_to_documents(item: dict, content: bytes) -> list[Document]:
         log.debug("Skipping unsupported file type: %s", name)
         return []
 
+    # Extract the folder path from the Graph API parentReference
+    # e.g. "/drives/{id}/root:/Memos/2026" → "Memos/2026"
+    folder_path = (
+        item.get("parentReference", {})
+        .get("path", "")
+        .split("/root:", 1)[-1]
+        .lstrip("/")
+    )
+
     base_meta = {
         "source": name,
         "sp_item_id": item.get("id", ""),
@@ -97,6 +117,7 @@ def file_to_documents(item: dict, content: bytes) -> list[Document]:
         "last_modified": item.get("lastModifiedDateTime", ""),
         "file_size": item.get("size", 0),
         "web_url": item.get("webUrl", ""),
+        "folder_path": folder_path,
     }
 
     try:
@@ -104,8 +125,8 @@ def file_to_documents(item: dict, content: bytes) -> list[Document]:
             raw_docs = _load_pdf(content, base_meta)
         elif ext == ".docx":
             raw_docs = _load_docx(content, base_meta)
-        elif ext in (".txt", ".md"):
-            raw_docs = _load_text(content, base_meta)
+        elif ext == ".doc":
+            raw_docs = _load_doc(content, base_meta)
         elif ext == ".xlsx":
             raw_docs = _load_xlsx(content, base_meta)
         else:
@@ -114,9 +135,10 @@ def file_to_documents(item: dict, content: bytes) -> list[Document]:
         log.error("Failed to parse '%s': %s", name, exc)
         return []
 
-    # Enrich metadata on every page/document
+    # Enrich metadata on every page/document; ensure 'page' always exists
     for doc in raw_docs:
         doc.metadata.update(base_meta)
+        doc.metadata.setdefault("page", "")
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config.CHUNK_SIZE,
@@ -124,6 +146,17 @@ def file_to_documents(item: dict, content: bytes) -> list[Document]:
         separators=["\n\n", "\n", " ", ""],
     )
     chunks = splitter.split_documents(raw_docs)
+
+    # Prepend a document header to every chunk so the filename and folder are
+    # part of the indexed text. This lets queries like "list all approved memos
+    # 2026" find documents by name even when the content doesn't repeat the title.
+    doc_header = f"[Document: {name}"
+    if folder_path:
+        doc_header += f" | Folder: {folder_path}"
+    doc_header += "]\n"
+    for chunk in chunks:
+        chunk.page_content = doc_header + chunk.page_content
+
     log.debug("'%s' → %d chunks", name, len(chunks))
     return chunks
 

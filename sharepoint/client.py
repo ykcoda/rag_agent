@@ -118,12 +118,56 @@ class SharePointClient:
             url = data.get("@odata.nextLink")
 
     def list_all_files(self) -> list[dict]:
-        """Return every file item in the drive root (recursive)."""
+        """
+        Return file items from the drive.
+
+        If SP_SCAN_FOLDERS is configured, only folders whose names are in that
+        list (and their sub-folders) are scanned.  Otherwise the entire drive
+        root is scanned (original behaviour).
+        """
         drive_id = self.get_drive_id()
+
+        if config.SP_SCAN_FOLDERS:
+            files: list[dict] = []
+            for folder_name in config.SP_SCAN_FOLDERS:
+                url = f"{GRAPH_BASE}/drives/{drive_id}/root:/{folder_name}:/children"
+                try:
+                    folder_files = list(self._iter_folder(url))
+                    log.info(
+                        "Folder '%s': found %d files.", folder_name, len(folder_files)
+                    )
+                    files.extend(folder_files)
+                except Exception as exc:
+                    log.warning("Could not scan folder '%s': %s", folder_name, exc)
+            log.info(
+                "Total: %d files across %d folder(s).",
+                len(files),
+                len(config.SP_SCAN_FOLDERS),
+            )
+            return files
+
         root_url = f"{GRAPH_BASE}/drives/{drive_id}/root/children"
         files = list(self._iter_folder(root_url))
         log.info("Found %d files in SharePoint drive.", len(files))
         return files
+
+    def _is_in_scan_folders(self, item: dict) -> bool:
+        """
+        Return True if the item lives inside one of the configured SP_SCAN_FOLDERS.
+        Always returns True when SP_SCAN_FOLDERS is empty (no filter).
+
+        Graph API parentReference.path looks like:
+            /drives/{id}/root:/FolderName/SubFolder
+        """
+        if not config.SP_SCAN_FOLDERS:
+            return True
+        parent_path: str = item.get("parentReference", {}).get("path", "")
+        # Extract the portion after "/root:" → "FolderName/SubFolder" or ""
+        after_root = parent_path.split("/root:", 1)[-1].lstrip("/")
+        for folder in config.SP_SCAN_FOLDERS:
+            if after_root == folder or after_root.startswith(folder + "/"):
+                return True
+        return False
 
     # ── Delta / incremental sync ───────────────────────────────────────────
 
@@ -149,9 +193,11 @@ class SharePointClient:
             data = self._get(url)
             for item in data.get("value", []):
                 if item.get("deleted"):
-                    deleted.append(item)
+                    if self._is_in_scan_folders(item):
+                        deleted.append(item)
                 elif item.get("file"):
-                    new_or_modified.append(item)
+                    if self._is_in_scan_folders(item):
+                        new_or_modified.append(item)
             url = data.get("@odata.nextLink")
             delta_link = data.get("@odata.deltaLink", delta_link)
 

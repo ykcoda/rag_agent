@@ -28,7 +28,7 @@ A production-ready **Retrieval-Augmented Generation (RAG)** application that ind
 |-----------|--------|
 | **Data source** | SharePoint Online — IT Infrastructure Document Library |
 | **Authentication** | MSAL client-credentials (service principal, no user login required) |
-| **Supported file types** | `.pdf`, `.docx`, `.txt`, `.md`, `.xlsx` |
+| **Supported file types** | `.pdf`, `.docx`, `.doc`, `.xlsx` |
 | **Vector store** | ChromaDB — persisted to disk (`data/chroma/`) |
 | **Embeddings** | OpenAI `text-embedding-3-small` |
 | **LLM** | OpenAI GPT (configurable via `OPENAI_MODEL`) |
@@ -53,7 +53,7 @@ SharePoint Online
          ▼
   ┌─────────────────────┐
   │  sharepoint/client  │  ← Authenticates, lists files, downloads bytes
-  │  sharepoint/loader  │  ← Parses PDF/DOCX/TXT/XLSX → text chunks
+  │  sharepoint/loader  │  ← Parses PDF/DOCX/DOC/XLSX → text chunks + metadata
   └────────┬────────────┘
            │  LangChain Documents (with metadata)
            ▼
@@ -69,9 +69,11 @@ SharePoint Online
   │  1. History-aware retriever                             │
   │     └─ Rephrases question using chat history            │
   │  2. Stuff-documents QA chain                            │
-  │     └─ Formats retrieved docs + history into prompt     │
+  │     └─ Formats each chunk with metadata header:         │
+  │        [Source: file.pdf | Page: 3 | URL: https://...]  │
+  │        <chunk text>                                     │
   │  3. ChatOpenAI (streaming)                              │
-  │     └─ Generates grounded answer                        │
+  │     └─ Generates grounded answer with source citations  │
   │  4. RunnableWithMessageHistory                          │
   │     └─ Persists turns in InMemoryChatMessageHistory      │
   └────────┬────────────────────────────────────────────────┘

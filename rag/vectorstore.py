@@ -13,14 +13,21 @@ from pathlib import Path
 import chromadb
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_openai import OpenAIEmbeddings
+from langchain_core.embeddings import Embeddings
 
 from rag_agent import config
 
 log = logging.getLogger(__name__)
 
 
-def _embeddings() -> OpenAIEmbeddings:
+def _embeddings() -> Embeddings:
+    if config.LLM_PROVIDER == "ollama":
+        from langchain_ollama import OllamaEmbeddings
+        return OllamaEmbeddings(
+            model=config.OLLAMA_EMBEDDING_MODEL,
+            base_url=config.OLLAMA_BASE_URL,
+        )
+    from langchain_openai import OpenAIEmbeddings
     return OpenAIEmbeddings(
         model=config.OPENAI_EMBEDDING_MODEL,
         openai_api_key=config.OPENAI_API_KEY,

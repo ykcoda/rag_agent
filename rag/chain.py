@@ -16,9 +16,9 @@ from typing import Generator
 
 from langchain_classic.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.language_models import BaseChatModel
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_openai import ChatOpenAI
 
 from rag_agent import config
 from rag_agent.rag.vectorstore import get_vectorstore
@@ -66,24 +66,44 @@ Guidelines:
 - Answer only from the context above. If the information is not there, say so clearly.
 - Be concise and professional; use numbered steps for procedures.
 - Cite the source document name when referencing specific information.
+- For listing or enumeration requests (e.g. "list all memos", "what documents exist"), \
+compile every distinct document name that appears in the context under [Document: ...] \
+headers and present them as a numbered list with their folder path if available.
 - If the question is unrelated to IT infrastructure, politely redirect the user.
 """
 
 # ── Chain factory ──────────────────────────────────────────────────────────
 
-def build_rag_chain() -> RunnableWithMessageHistory:
-    llm = ChatOpenAI(
+def _build_llm() -> BaseChatModel:
+    if config.LLM_PROVIDER == "ollama":
+        from langchain_ollama import ChatOllama
+        return ChatOllama(
+            model=config.OLLAMA_MODEL,
+            base_url=config.OLLAMA_BASE_URL,
+            temperature=0,
+        )
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(
         model=config.OPENAI_MODEL,
         temperature=0,
         streaming=True,
         openai_api_key=config.OPENAI_API_KEY,
     )
 
+
+def build_rag_chain() -> RunnableWithMessageHistory:
+    llm = _build_llm()
+
+    # MMR (Maximum Marginal Relevance) fetches a larger candidate pool then
+    # selects k diverse results — much better than similarity_score_threshold
+    # for listing queries ("list all approved memos") because it never silently
+    # drops results that fail an arbitrary score cutoff.
     retriever = get_vectorstore().as_retriever(
         search_type="mmr",
         search_kwargs={
             "k": config.RETRIEVER_K,
-            "fetch_k": config.RETRIEVER_K * 3,
+            "fetch_k": config.RETRIEVER_FETCH_K,
+            "lambda_mult": 0.7,  # 1.0 = pure similarity, 0.0 = pure diversity
         },
     )
 
@@ -107,7 +127,10 @@ def build_rag_chain() -> RunnableWithMessageHistory:
             ("human", "{input}"),
         ]
     )
-    qa_chain = create_stuff_documents_chain(llm, qa_prompt)
+    document_prompt = PromptTemplate.from_template(
+        "[Source: {source} | Page: {page} | URL: {web_url}]\n{page_content}"
+    )
+    qa_chain = create_stuff_documents_chain(llm, qa_prompt, document_prompt=document_prompt)
 
     # Step 3 — combine into a full retrieval chain
     retrieval_chain = create_retrieval_chain(history_aware_retriever, qa_chain)

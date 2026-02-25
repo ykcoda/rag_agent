@@ -99,8 +99,14 @@ def render_sidebar() -> None:
         else:
             st.warning("⚠️ No documents indexed yet")
 
-        st.caption(f"Model: `{config.OPENAI_MODEL}`")
-        st.caption(f"Embeddings: `{config.OPENAI_EMBEDDING_MODEL}`")
+        if config.LLM_PROVIDER == "ollama":
+            st.caption(f"Provider: `ollama`")
+            st.caption(f"Model: `{config.OLLAMA_MODEL}`")
+            st.caption(f"Embeddings: `{config.OLLAMA_EMBEDDING_MODEL}`")
+        else:
+            st.caption(f"Provider: `openai`")
+            st.caption(f"Model: `{config.OPENAI_MODEL}`")
+            st.caption(f"Embeddings: `{config.OPENAI_EMBEDDING_MODEL}`")
         st.caption(f"Collection: `{config.CHROMA_COLLECTION_NAME}`")
 
         if st.session_state.last_sync_time:
