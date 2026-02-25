@@ -1,0 +1,69 @@
+version: "3.9"
+
+# ── Shared build context ────────────────────────────────────────────────────
+x-build: &build
+  build:
+    context: ..
+    dockerfile: rag_agent/Dockerfile
+
+# ── Shared env & volume ────────────────────────────────────────────────────
+x-common: &common
+  <<: *build
+  env_file:
+    - ../.env
+  volumes:
+    # Persist Chroma DB and delta token between container restarts
+    - rag_data:/app/rag_agent/data
+  restart: unless-stopped
+
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+
+  # ── Streamlit web app ─────────────────────────────────────────────────────
+  rag-app:
+    <<: *common
+    container_name: rag-app
+    ports:
+      - "${APP_PORT:-8501}:8501"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    command:
+      - uv
+      - run
+      - streamlit
+      - run
+      - rag_agent/app.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
+      - --server.headless=true
+      - --browser.gatherUsageStats=false
+      - --server.enableCORS=false
+      - --server.enableXsrfProtection=true
+
+  # ── Incremental sync scheduler ────────────────────────────────────────────
+  rag-scheduler:
+    <<: *common
+    container_name: rag-scheduler
+    depends_on:
+      rag-app:
+        condition: service_healthy
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - rag_agent.scripts.sync
+      - --scheduler
+
+# ── Named volume (bind-mounted to ./data on the host) ─────────────────────
+volumes:
+  rag_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
