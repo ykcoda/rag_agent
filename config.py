@@ -10,7 +10,7 @@ from pathlib import Path
 try:
     from dotenv import load_dotenv
 
-    load_dotenv(Path(__file__).parent.parent / ".env", override=False)
+    load_dotenv(Path(__file__).parent / ".env", override=False)
 except ImportError:
     pass  # dotenv not available; rely on pre-set env vars
 

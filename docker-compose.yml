@@ -3,17 +3,17 @@ version: "3.9"
 # ── Shared build context ────────────────────────────────────────────────────
 x-build: &build
   build:
-    context: ..
-    dockerfile: rag_agent/Dockerfile
+    context: .
+    dockerfile: Dockerfile
 
 # ── Shared env & volume ────────────────────────────────────────────────────
 x-common: &common
   <<: *build
   env_file:
-    - ../.env
+    - .env
   volumes:
     # Persist Chroma DB and delta token between container restarts
-    - rag_data:/app/rag_agent/data
+    - rag_data:/app/data
   restart: unless-stopped
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ services:
       - run
       - streamlit
       - run
-      - rag_agent/app.py
+      - app.py
       - --server.address=0.0.0.0
       - --server.port=8501
       - --server.headless=true

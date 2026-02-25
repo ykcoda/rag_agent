@@ -8,7 +8,7 @@ Usage:
     uv run python -m rag_agent.scripts.ingest
 
     # Or directly:
-    uv run python rag_agent/scripts/ingest.py
+    uv run python scripts/ingest.py
 """
 from __future__ import annotations
 

@@ -29,7 +29,7 @@ A production-ready **Retrieval-Augmented Generation (RAG)** application that ind
 | **Data source** | SharePoint Online — IT Infrastructure Document Library |
 | **Authentication** | MSAL client-credentials (service principal, no user login required) |
 | **Supported file types** | `.pdf`, `.docx`, `.txt`, `.md`, `.xlsx` |
-| **Vector store** | ChromaDB — persisted to disk (`rag_agent/data/chroma/`) |
+| **Vector store** | ChromaDB — persisted to disk (`data/chroma/`) |
 | **Embeddings** | OpenAI `text-embedding-3-small` |
 | **LLM** | OpenAI GPT (configurable via `OPENAI_MODEL`) |
 | **Memory** | Per-session conversation history (in-process, UUID-keyed) |
@@ -110,7 +110,7 @@ scripts/ingest.py             scripts/sync.py
 │         └─────────────────┬────┘                 │
 │                           │ shared volume         │
 │                   ┌───────▼──────────────┐        │
-│                   │  rag_agent/data/     │        │
+│                   │  data/               │        │
 │                   │  ├── chroma/         │        │
 │                   │  └── delta_token.json│        │
 │                   └──────────────────────┘        │
@@ -191,7 +191,7 @@ From the app registration **Overview** page, note:
 Copy `.env.example` to the **project root** (alongside `pyproject.toml`) and fill in the values:
 
 ```bash
-cp rag_agent/.env.example .env
+cp .env.example .env
 ```
 
 ### Full Reference
@@ -207,13 +207,13 @@ cp rag_agent/.env.example .env
 | `SP_SITE_HOSTNAME` | `myfidelitybank.sharepoint.com` | No | SharePoint hostname |
 | `SP_SITE_PATH` | `/sites/ITInfrastructureCenter` | No | Site-relative path |
 | `SP_DRIVE_NAME` | `IT Infrastructure Document Lib` | No | Document library name |
-| `CHROMA_PERSIST_DIR` | `./rag_agent/data/chroma` | No | Chroma storage path |
+| `CHROMA_PERSIST_DIR` | `./data/chroma` | No | Chroma storage path |
 | `CHROMA_COLLECTION_NAME` | `sharepoint_docs` | No | Chroma collection name |
 | `RETRIEVER_K` | `6` | No | Chunks returned per query |
 | `CHUNK_SIZE` | `1000` | No | Characters per document chunk |
 | `CHUNK_OVERLAP` | `200` | No | Overlap between adjacent chunks |
 | `SYNC_INTERVAL_HOURS` | `6` | No | Hours between scheduled syncs |
-| `DELTA_TOKEN_PATH` | `./rag_agent/data/delta_token.json` | No | Where to store the delta token |
+| `DELTA_TOKEN_PATH` | `./data/delta_token.json` | No | Where to store the delta token |
 | `APP_TITLE` | `IT Infrastructure Knowledge Base` | No | Streamlit page title |
 | `APP_PORT` | `8501` | No | Host port for Docker mapping |
 | `INSECURE` | `False` | No | Set `True` behind SSL-inspection proxy |
@@ -270,7 +270,7 @@ uv sync
 ### 2. Configure environment
 
 ```bash
-cp rag_agent/.env.example .env
+cp .env.example .env
 # Edit .env — fill in OPENAI_API_KEY, SP_TENANT_ID, SP_CLIENT_ID, SP_CLIENT_SECRET
 ```
 
@@ -301,7 +301,7 @@ uv run python -c "from rag_agent.rag.vectorstore import get_doc_count; print(get
 ## 8. Running the App (Local)
 
 ```bash
-uv run streamlit run rag_agent/app.py
+uv run streamlit run app.py
 ```
 
 Open `http://localhost:8501` in your browser.
@@ -325,11 +325,9 @@ Open `http://localhost:8501` in your browser.
 
 ### Build and start
 
-All commands should be run from the `rag_agent/` directory:
+All commands should be run from the project root:
 
 ```bash
-cd rag_agent
-
 # Create the data directory on the host (bind-mounted into containers)
 mkdir -p data
 
@@ -432,7 +430,7 @@ docker compose exec rag-app uv run python -m rag_agent.scripts.ingest
 If you want the next scheduled sync to re-process all files (without clearing the index):
 
 ```bash
-rm rag_agent/data/delta_token.json
+rm data/delta_token.json
 ```
 
 The next `sync.py` run will use the full delta endpoint and re-process everything.
@@ -512,10 +510,10 @@ The initial ingestion has not been run yet. Execute:
 uv run python -m rag_agent.scripts.ingest
 ```
 
-#### `Chroma store at ./rag_agent/data/chroma is corrupt`
+#### `Chroma store at ./data/chroma is corrupt`
 Delete the store and re-ingest:
 ```bash
-rm -rf rag_agent/data/chroma rag_agent/data/delta_token.json
+rm -rf data/chroma data/delta_token.json
 uv run python -m rag_agent.scripts.ingest
 ```
 
