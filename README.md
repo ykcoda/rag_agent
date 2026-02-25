@@ -1,6 +1,6 @@
 # IT Infrastructure Knowledge Base — RAG Agent
 
-A production-ready **Retrieval-Augmented Generation (RAG)** application that indexes documents from the FidelityBank SharePoint IT Infrastructure Document Library and provides a ChatGPT-style chat interface for querying them.
+A production-ready **Retrieval-Augmented Generation (RAG)** application that indexes documents from the MS Share Point and provides a Chat interface for querying them.
 
 ---
 
